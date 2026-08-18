@@ -1,9 +1,11 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class DocumentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     project_id: int
     filename: str
@@ -11,7 +13,9 @@ class DocumentResponse(BaseModel):
     file_size: int
     storage_path: str
     status: str
-    uploaded_at: datetime
-
-    class Config:
-        orm_mode = True
+    title: str | None = None
+    pages: int | None = None
+    language: str | None = None
+    summary: str | None = None
+    created_at: datetime
+    updated_at: datetime

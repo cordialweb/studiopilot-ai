@@ -1,3 +1,3 @@
-from app.adk.document.agent import root_agent as document_agent
+from app.adk.document.agent import document_agent
 
 root_agent = document_agent

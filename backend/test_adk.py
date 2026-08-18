@@ -1,8 +1,13 @@
 from app.adk.engine import StudioPilotEngine
 
+
 engine = StudioPilotEngine()
 
-session = engine.create_session("umar")
+events = engine.run(
+    user_id="test-user",
+    text="Say hello to StudioPilot AI in one short sentence."
+)
 
-print(session)
-print(session.id)
+for event in events:
+    if event.is_final_response():
+        print(event.content.parts[0].text)

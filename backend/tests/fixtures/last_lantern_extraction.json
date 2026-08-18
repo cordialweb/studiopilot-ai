@@ -1,0 +1,33 @@
+import json
+
+from app.adk.engine import StudioPilotEngine
+from app.services.producer_observation_service import (
+    ProducerObservationService,
+)
+
+
+with open(
+    "tests/fixtures/last_lantern_extraction.json",
+    "r",
+    encoding="utf-8",
+) as f:
+    screenplay = json.load(f)
+
+
+engine = StudioPilotEngine()
+
+service = ProducerObservationService(engine)
+
+result = service.observe(
+    screenplay_text=json.dumps(
+        screenplay,
+        ensure_ascii=False,
+        indent=2,
+    )
+)
+
+print()
+print("FULL SCREENPLAY PRODUCER OBSERVATION SUCCESS")
+print()
+
+print(result.model_dump(mode="json"))
