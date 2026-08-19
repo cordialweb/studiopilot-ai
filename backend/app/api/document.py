@@ -24,7 +24,7 @@ from app.schemas.producer_observation import (
 )
 from app.adk.engine import StudioPilotEngine
 from app.schemas.document import DocumentResponse
-
+from app.models.document import DocumentStatus
 
 router = APIRouter(
     prefix="/documents",
@@ -118,12 +118,10 @@ def upload_document(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
-    # 1. Save uploaded file
     storage = StorageService()
 
     filepath = storage.save(file)
 
-    # 2. Create document record
     document_service = DocumentService(db)
 
     document = document_service.create_document(
@@ -134,54 +132,92 @@ def upload_document(
         storage_path=filepath,
     )
 
-    # 3. Extract document information using AI
-    engine = StudioPilotEngine()
-
-    extractor = DocumentExtractionService(engine)
-
-    result = extractor.extract(filepath)
-
-    # 4. Persist AI extraction
-    persistence = ExtractionPersistenceService(db)
-
-    persistence.save(
-        document_id=document.id,
-        result=result,
-    )
-    
-    # 4.5. Generate producer observations
-    producer_service = ProducerObservationService(engine)
-    
-    producer_observations = producer_service.observe(
-        screenplay_text=result.model_dump_json()
-    )
-    
-    # 4.7. Persist producer observations
-    observation_persistence = ProducerObservationPersistenceService(db)
-    
-    observation_persistence.save(
-        document_id=document.id,
-        result=producer_observations,
-    )
-
-    # 5. Update document metadata/status
-    document.title = result.document.title
-    document.pages = result.document.pages
-    document.language = result.document.language
-    document.summary = result.document.summary
-    document.status = "extracted"
-
+    # Mark document as processing before AI work starts
+    document.status = DocumentStatus.PROCESSING
     document_service.update_document(document)
 
-    # 6. Return result
-    return {
-        "document": {
-            "id": document.id,
-            "filename": document.filename,
-            "status": document.status,
-        },
-        "extraction": result.model_dump(mode="json"),
-        "producer_observations": producer_observations.model_dump(
-            mode="json"
-        ),
-    }
+    try:
+        # -----------------------------------------
+        # AI extraction
+        # -----------------------------------------
+
+        engine = StudioPilotEngine()
+
+        extractor = DocumentExtractionService(engine)
+
+        result = extractor.extract(filepath)
+
+        # -----------------------------------------
+        # Persist extraction
+        # -----------------------------------------
+
+        persistence = ExtractionPersistenceService(db)
+
+        persistence.save(
+            document_id=document.id,
+            result=result,
+        )
+
+        # -----------------------------------------
+        # Generate producer observations
+        # -----------------------------------------
+
+        producer_service = ProducerObservationService(engine)
+
+        producer_observations = producer_service.observe(
+            screenplay_text=result.model_dump_json()
+        )
+
+        # -----------------------------------------
+        # Persist producer observations
+        # -----------------------------------------
+
+        observation_persistence = (
+            ProducerObservationPersistenceService(db)
+        )
+
+        observation_persistence.save(
+            document_id=document.id,
+            result=producer_observations,
+        )
+
+        # -----------------------------------------
+        # Update document metadata
+        # -----------------------------------------
+
+        document.title = result.document.title
+        document.pages = result.document.pages
+        document.language = result.document.language
+        document.summary = result.document.summary
+        document.status = DocumentStatus.EXTRACTED
+
+        document_service.update_document(document)
+
+        # -----------------------------------------
+        # Return
+        # -----------------------------------------
+
+        return {
+            "document": {
+                "id": document.id,
+                "filename": document.filename,
+                "status": document.status,
+            },
+            "extraction": result.model_dump(mode="json"),
+            "producer_observations": producer_observations.model_dump(
+                mode="json"
+            ),
+        }
+
+    except Exception as exc:
+        # -----------------------------------------
+        # Mark document as failed
+        # -----------------------------------------
+
+        document.status = DocumentStatus.FAILED
+        document_service.update_document(document)
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Document processing failed: {str(exc)}",
+        ) from exc
