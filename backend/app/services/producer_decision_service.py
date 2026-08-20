@@ -7,7 +7,7 @@ from app.repositories.producer_decision_repository import (
 from app.repositories.producer_observation_repository import (
     ProducerObservationRepository,
 )
-
+from app.services.production_task_service import ProductionTaskService
 
 class ProducerDecisionService:
 
@@ -73,12 +73,12 @@ class ProducerDecisionService:
         assigned_department: str | None = None,
         assigned_person: str | None = None,
     ) -> ProducerDecision:
-
+    
         observation = self._get_observation(
             document_id=document_id,
             observation_id=observation_id,
         )
-
+    
         producer_decision = ProducerDecision(
             document_id=document_id,
             observation_id=observation_id,
@@ -87,13 +87,26 @@ class ProducerDecisionService:
             assigned_department=assigned_department,
             assigned_person=assigned_person,
         )
-
+    
         self._sync_status(
             observation,
             producer_decision,
         )
-
-        return self.repository.create(producer_decision)
+    
+        # First save decision so it receives an ID
+        producer_decision = self.repository.create(
+            producer_decision
+        )
+    
+        # Then generate task using the persisted decision
+        if producer_decision.decision == "approve":
+            ProductionTaskService(
+                self.repository.db
+            ).generate_from_decision(
+                producer_decision
+            )
+    
+        return producer_decision
 
     def get_decision(
         self,
