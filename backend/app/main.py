@@ -11,6 +11,9 @@ from app.api.producer_decision import router as producer_decision_router
 from app.api.production_task import router as production_task_router
 from app.api.production_overview import router as production_overview_router
 from app.api.producer_observation import router as producer_observation_router
+from app.api.producer_action_queue import (
+    router as producer_action_queue_router,
+)
 
 
 app = FastAPI(
@@ -32,7 +35,7 @@ app.include_router(producer_decision_router)
 app.include_router(production_task_router)
 app.include_router(production_overview_router)
 app.include_router(producer_observation_router)
-
+app.include_router(producer_action_queue_router)
 
 @app.get("/")
 def root():
