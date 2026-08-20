@@ -259,23 +259,24 @@ class ProductionTaskService:
         task_id: int,
         **values,
     ) -> ProductionTask:
-
+    
         task = self.repository.get_by_id(task_id)
-
+    
         if not task:
             raise ValueError(
                 "Production task not found."
             )
-
+    
         # -----------------------------------------
         # Validate status transitions
         # -----------------------------------------
-
-        if "status" in values and values["status"] is not None:
-
+    
+        new_status = values.get("status")
+    
+        if new_status is not None:
+    
             current_status = task.status
-            new_status = values["status"]
-
+    
             allowed_transitions = {
                 "pending": {
                     "pending",
@@ -294,22 +295,51 @@ class ProductionTaskService:
                     "cancelled",
                 },
             }
-
+    
             allowed = allowed_transitions.get(
                 current_status,
                 set(),
             )
-
+    
             if new_status not in allowed:
                 raise ValueError(
                     f"Invalid task status transition: "
                     f"{current_status} -> {new_status}"
                 )
-
-        return self.repository.update(
+    
+        # -----------------------------------------
+        # Update task
+        # -----------------------------------------
+    
+        task = self.repository.update(
             task,
             **values,
         )
+    
+        # -----------------------------------------
+        # Resolve producer decision
+        # when task is completed
+        # -----------------------------------------
+    
+        if (
+            new_status == "completed"
+            and task.decision_id
+        ):
+    
+            decision = (
+                self.db.query(ProducerDecision)
+                .filter(
+                    ProducerDecision.id == task.decision_id
+                )
+                .first()
+            )
+    
+            if decision:
+                decision.status = "resolved"
+                self.db.commit()
+                self.db.refresh(decision)
+    
+        return task
         
     def get_task_decision(
         self,
